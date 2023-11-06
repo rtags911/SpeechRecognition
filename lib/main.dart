@@ -1,74 +1,92 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:logging/logging.dart'; // Import the logging package
+import 'package:logging/logging.dart';
 import 'package:permission_handler/permission_handler.dart';
+
 import 'dart:convert';
 
 void main() {
-  runApp(const MyApp());
+  runApp(MyApp());
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends StatelessWidget {
   @override
-  State<MyApp> createState() => _MyAppState();
-  const MyApp({super.key});
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      title: 'Translation App',
+      home: TranslationPage(),
+    );
+  }
 }
 
-class _MyAppState extends State<MyApp> {
-  final Logger _logger = Logger('MyApp'); // Create a logger instance
-  String nine = 'today';
-  String transribetext = '';
-  String translated = 'Translation';
-  String url = 'http://192.168.68.101:5000/upload_audio';
-  int curtindex = 0;
+class TranslationPage extends StatefulWidget {
+  const TranslationPage({Key? key}) : super(key: key);
+
+  @override
+  _TranslationPageState createState() => _TranslationPageState();
+}
+
+class _TranslationPageState extends State<TranslationPage> {
+  final Logger _logger = Logger('TranslationPage');
+TextEditingController textEditingController = TextEditingController();
+  final TextEditingController _textController = TextEditingController();
+  String enteredText = '';
+  Timer? _timer;
+  String transcribedText = '';
+  String TextChoose = 'Conyo';
+  String translatedText = ' ';
+  int currentIndex = 0;
   bool isVisible = true;
   bool isRecording = false;
   late FlutterSoundRecorder _audioRecorder;
-  bool shouldHideSizedBox = false;
 
   @override
   void initState() {
     super.initState();
     _audioRecorder = FlutterSoundRecorder();
     _audioRecorder.openRecorder();
-
     requestPermissions();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Add a listener to check the keyboard status after the build is completed
       checkKeyboardVisibility();
     });
   }
 
-  void checkKeyboardVisibility() {
-    final mediaQueryData = MediaQuery.of(context);
-    final keyboardHeight = mediaQueryData.viewInsets.bottom;
+void updateHintText(String translatedWord) {
     setState(() {
-      isVisible = keyboardHeight <= 0;
+      textEditingController.text =
+          translatedWord; // Update text in the controller
+    });
+  }
+  void checkKeyboardVisibility() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final mediaQueryData = MediaQuery.of(context);
+      final keyboardHeight = mediaQueryData.viewInsets.bottom;
+      if (mounted) {
+        setState(() {
+          isVisible = keyboardHeight <= 0;
+        });
+      }
     });
   }
 
   Future<void> requestPermissions() async {
-    // Request both RECORD_AUDIO and WRITE_EXTERNAL_STORAGE permissions
     Map<Permission, PermissionStatus> statuses = await [
       Permission.microphone,
       Permission.storage,
     ].request();
-
-    // Check the status for each permission
     if (statuses[Permission.microphone]!.isGranted &&
         statuses[Permission.storage]!.isGranted) {
-      // Permissions granted, you can proceed with audio recording or other tasks.
+      // Permissions granted
     } else if (statuses[Permission.microphone]!.isDenied ||
         statuses[Permission.storage]!.isDenied) {
-      // Permissions denied on the first request, show a message or explanation to the user.
       _showPermissionDeniedDialog();
     } else if (statuses[Permission.microphone]!.isPermanentlyDenied ||
         statuses[Permission.storage]!.isPermanentlyDenied) {
-      // Permissions permanently denied, open app settings so the user can enable them manually.
       openAppSettings();
     }
   }
@@ -97,12 +115,10 @@ class _MyAppState extends State<MyApp> {
       if (!isRecording) {
         final tempDir = await getTemporaryDirectory();
         final recordingPath = '${tempDir.path}/my_audio.wav';
-
         await _audioRecorder.startRecorder(
           toFile: recordingPath,
           codec: Codec.pcm16WAV,
         );
-
         Fluttertoast.showToast(
           msg: 'Recording!',
           toastLength: Toast.LENGTH_SHORT,
@@ -110,13 +126,11 @@ class _MyAppState extends State<MyApp> {
           backgroundColor: Colors.red,
           textColor: Colors.white,
         );
-
         setState(() {
-          isRecording = true; // Update the state when recording starts
+          isRecording = true;
         });
       } else {
         await _audioRecorder.stopRecorder();
-
         Fluttertoast.showToast(
           msg: 'Recording stopped',
           toastLength: Toast.LENGTH_SHORT,
@@ -124,12 +138,9 @@ class _MyAppState extends State<MyApp> {
           backgroundColor: Colors.green,
           textColor: Colors.white,
         );
-
-        // Send the recorded audio to the server
         await sendAudioToServer();
-
         setState(() {
-          isRecording = false; // Update the state when recording stops
+          isRecording = false;
         });
       }
     } catch (e) {
@@ -139,59 +150,56 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> sendAudioToServer() async {
     try {
-      final tempDir =
-          await getTemporaryDirectory(); // Get the temporary directory
+      final tempDir = await getTemporaryDirectory();
       final recordingPath = '${tempDir.path}/my_audio.wav';
-
-      var uri = Uri.parse(url); // Replace with your Flask backend URL
+      var uri = Uri.parse('http://192.168.31.29:5000/upload_audio/$TextChoose');
       var request = http.MultipartRequest('POST', uri)
         ..files.add(await http.MultipartFile.fromPath('audio', recordingPath));
 
       var response = await request.send();
+
       if (response.statusCode == 200) {
-        // Successfully uploaded audio, handle the response
         String responseBody = await response.stream.bytesToString();
         Map<String, dynamic> jsonResponse = json.decode(responseBody);
-
-        // Extract recognized and translated text
         String recognizedText = jsonResponse['recognized_text'];
         String translatedText = jsonResponse['translated_text'];
-
-        // Update the UI with the transcription and translation
         setState(() {
-          transribetext = recognizedText.replaceAll('"', '');
-          translated = translatedText.replaceAll('"', '');
+          transcribedText = recognizedText.replaceAll('"', '');
+          print(transcribedText);
+          translatedText = translatedText.replaceAll('"', '');
+          print(translatedText);
         });
       } else {
-        // Handle errors
-        _logger.warning(
-            'Error: ${response.reasonPhrase}'); // Use the logger for warnings
+        _logger.warning('Error: ${response.reasonPhrase}');
       }
     } catch (e) {
-      _logger.severe(
-          'Error sending audio to server: $e'); // Use the logger for errors
+      _logger.severe('Error sending audio to server: $e');
     }
   }
 
   Future<void> sendTextToServer(String text) async {
     try {
-      var uri = Uri.parse(url); // Replace with your Flask backend URL
-      var response = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'text': text}),
-      );
+      // Replace the URL with your server endpoint
+      // ignore: prefer_interpolation_to_compose_strings
+      var uri = Uri.parse('http://192.168.68.101:5000/$TextChoose');
+
+      var request = http.MultipartRequest('POST', uri)
+        ..fields['text'] =
+            enteredText; // Sending text as a field in the request
+
+      var response = await request.send();
 
       if (response.statusCode == 200) {
-        // Successfully received the translated text from the server
-        String translatedText = jsonDecode(response.body)['translated_text'];
+        String responseBody = await response.stream.bytesToString();
+        Map<String, dynamic> jsonResponse = json.decode(responseBody);
+        String recognizedText = jsonResponse['recognized_text'];
+        String translatedText = jsonResponse['translated_text'];
 
-        // Update the UI with the translated text
         setState(() {
-          transribetext = translatedText.replaceAll('"', '');
+          transcribedText = recognizedText.replaceAll('"', '');
+          translatedText = translatedText.replaceAll('"', '');
         });
       } else {
-        // Handle errors from the server
         _logger.warning('Error: ${response.reasonPhrase}');
       }
     } catch (e) {
@@ -199,9 +207,21 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
+  void updateTranslatedText(String newText) {
+    setState(() {
+      translatedText = newText; // Update translatedText with new text
+    });
+  }
+
   @override
   void dispose() {
-    _audioRecorder.closeRecorder();
+    _textController
+        .dispose(); // Dispose the TextEditingController to avoid memory leaks
+    if (_timer != null && _timer!.isActive) {
+      _timer!.cancel(); // Cancel the timer on dispose
+    }
+
+    _audioRecorder.closeRecorder(); // Dispose the audio recorder
     super.dispose();
   }
 
@@ -215,112 +235,154 @@ class _MyAppState extends State<MyApp> {
       backgroundColor: Colors.lightBlue.shade500,
       fixedSize: const Size(150, 50),
     );
-
-    final TextStyle inputStyle = TextStyle(
-      fontSize: 40,
-      fontWeight: FontWeight.bold,
-      color: Colors.black,
-    );
-
-    return MaterialApp(
-      home: Scaffold(
-          appBar: AppBar(
-            leading: const Icon(Icons.translate),
-            title: const Text('Translation'),
-            backgroundColor: Colors.lightBlue.shade800,
+updateHintText(translatedText);
+    return Scaffold(
+      appBar: AppBar(
+        leading: const Icon(Icons.translate),
+        title: const Text('Translation'),
+        backgroundColor: Colors.lightBlue.shade800,
+      ),
+      body: Column(
+        children: [
+          Container(
+            decoration: const BoxDecoration(color: Colors.white10),
           ),
-          body: Column(
-            children: [
-              Container(
-                decoration: const BoxDecoration(color: Colors.white10),
-              ),
-              Expanded(
-                flex: 1,
-                child: Container(
-                  height: 400,
-                  decoration: BoxDecoration(
-                      color: Colors.lightBlue.shade800,
-                      borderRadius: const BorderRadius.only(
-                        bottomRight: Radius.circular(40),
-                        bottomLeft: Radius.circular(40),
-                      )),
-                  child: Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(10.0),
-                        child: TextField(
-                          decoration: const InputDecoration(
-                              hintText: 'Enter Text ',
-                              border: InputBorder.none),
-                          style: inputStyle,
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(10.0),
-                        child: TextField(
-                          decoration: const InputDecoration(
-                              hintText: 'Enter Text ',
-                              border: InputBorder.none),
-                          style: inputStyle,
-                          enabled: false,
-                        ),
-                      ),
-                    ],
-                  ),
+          Expanded(
+            flex: 1,
+            child: Container(
+              height: 400,
+              decoration: BoxDecoration(
+                color: Colors.lightBlue.shade800,
+                borderRadius: const BorderRadius.only(
+                  bottomRight: Radius.circular(40),
+                  bottomLeft: Radius.circular(40),
                 ),
               ),
-              Container(
-                height: 100,
-                decoration: const BoxDecoration(color: Colors.white10),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ElevatedButton(
-                      style: style,
-                      onPressed: () {
-                        // ignore: avoid_print
-                        print('Button Pressed2');
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(10.0),
+                    child: TextField(
+                      controller: TextEditingController(text: transcribedText),
+                      onChanged: (text) {
+                        if (_timer != null && _timer!.isActive) {
+                          _timer!.cancel(); // Cancel the previous timer
+                        }
+                        _timer = Timer(const Duration(milliseconds: 800), () {
+                          setState(() {
+                            enteredText = transcribedText;
+                            print(
+                                enteredText); // Capture the text after a delay
+                          });
+                        });
+                        //sendTextToServer(text);
                       },
-                      child: const Text("Conyo"),
-                    ),
-                    const Icon(
-                      Icons.arrow_forward,
-                      size: 35,
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        // ignore: avoid_print
-                        print('Button Pressed1');
-                      },
-                      style: style,
-                      child: const Text("Bisaya"),
-                    ),
-                  ],
-                ),
-              ),
-              Visibility(
-                visible: !showfab,
-                child: SizedBox(
-                  height: 80,
-                  width: 80,
-                  child: GestureDetector(
-                    onTap: toggleRecording,
-                    child: FloatingActionButton(
-                      backgroundColor: isRecording ? Colors.red : null,
-                      child: Icon(
-                        isRecording ? Icons.stop : Icons.mic,
-                        size: 42,
+                      decoration: const InputDecoration(
+                        hintText: 'Enter Text',
+                        border: InputBorder.none,
                       ),
-                      onPressed: () {
-                        // Handle microphone button press
-                        toggleRecording();
-                      },
+                      style: const TextStyle(
+                        fontSize: 40,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
                     ),
                   ),
+                 Padding(
+                    padding: const EdgeInsets.all(10.0),
+                    child: TextField(
+                      decoration: InputDecoration(
+                        hintText: translatedText,
+                        border: InputBorder.none,
+                        enabled: false,
+                      ),
+                      style: const TextStyle(
+                        fontSize: 40,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
+                      
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Container(
+            height: 100,
+            decoration: const BoxDecoration(color: Colors.white10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ElevatedButton(
+                  style: style,
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      builder: (BuildContext builder) {
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            ListTile(
+                              title: const Text('Conyo'),
+                              onTap: () {
+                                Navigator.pop(context, 'Conyo');
+                              },
+                            ),
+                            ListTile(
+                              title: const Text('English'),
+                              onTap: () {
+                                Navigator.pop(context, 'English');
+                              },
+                            ),
+                          ],
+                        );
+                      },
+                    ).then((value) {
+                      if (value != null) {
+                        setState(() {
+                          TextChoose = value;
+                          print('Press : ' + TextChoose);
+                        });
+                      }
+                    });
+                  },
+                  child: Text(TextChoose),
                 ),
-              )
-            ],
-          )),
+                const Icon(
+                  Icons.arrow_forward,
+                  size: 35,
+                ),
+                ElevatedButton(
+                  onPressed: () {},
+                  style: style,
+                  child: const Text("Bisaya"),
+                ),
+              ],
+            ),
+          ),
+          Visibility(
+            visible: !showfab,
+            child: SizedBox(
+              height: 80,
+              width: 80,
+              child: GestureDetector(
+                onTap: toggleRecording,
+                child: FloatingActionButton(
+                  backgroundColor: isRecording ? Colors.red : null,
+                  child: Icon(
+                    isRecording ? Icons.stop : Icons.mic,
+                    size: 42,
+                  ),
+                  onPressed: () {
+                    toggleRecording();
+                  },
+                ),
+              ),
+            ),
+          )
+        ],
+      ),
     );
   }
 }
