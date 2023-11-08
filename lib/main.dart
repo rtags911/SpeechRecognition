@@ -33,13 +33,15 @@ class TranslationPage extends StatefulWidget {
 
 class _TranslationPageState extends State<TranslationPage> {
   final Logger _logger = Logger('TranslationPage');
-TextEditingController textEditingController = TextEditingController();
+  TextEditingController textEditingController = TextEditingController();
   final TextEditingController _textController = TextEditingController();
   String enteredText = '';
   Timer? _timer;
   String transcribedText = '';
   String TextChoose = 'Conyo';
-  String translatedText = ' ';
+   String resultText = '';
+    
+  String finalText = '';
   int currentIndex = 0;
   bool isVisible = true;
   bool isRecording = false;
@@ -56,12 +58,6 @@ TextEditingController textEditingController = TextEditingController();
     });
   }
 
-void updateHintText(String translatedWord) {
-    setState(() {
-      textEditingController.text =
-          translatedWord; // Update text in the controller
-    });
-  }
   void checkKeyboardVisibility() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final mediaQueryData = MediaQuery.of(context);
@@ -73,6 +69,8 @@ void updateHintText(String translatedWord) {
       }
     });
   }
+
+
 
   Future<void> requestPermissions() async {
     Map<Permission, PermissionStatus> statuses = await [
@@ -166,8 +164,8 @@ void updateHintText(String translatedWord) {
         setState(() {
           transcribedText = recognizedText.replaceAll('"', '');
           print(transcribedText);
-          translatedText = translatedText.replaceAll('"', '');
-          print(translatedText);
+          resultText = translatedText.replaceAll('"', '');
+          print(resultText);
         });
       } else {
         _logger.warning('Error: ${response.reasonPhrase}');
@@ -207,12 +205,7 @@ void updateHintText(String translatedWord) {
     }
   }
 
-  void updateTranslatedText(String newText) {
-    setState(() {
-      translatedText = newText; // Update translatedText with new text
-    });
-  }
-
+ 
   @override
   void dispose() {
     _textController
@@ -235,7 +228,7 @@ void updateHintText(String translatedWord) {
       backgroundColor: Colors.lightBlue.shade500,
       fixedSize: const Size(150, 50),
     );
-updateHintText(translatedText);
+
     return Scaffold(
       appBar: AppBar(
         leading: const Icon(Icons.translate),
@@ -261,9 +254,9 @@ updateHintText(translatedText);
               child: Column(
                 children: [
                   Padding(
-                    padding: const EdgeInsets.all(10.0),
+                    padding: const EdgeInsets.only(top: 25, left: 10),
                     child: TextField(
-                      controller: TextEditingController(text: transcribedText),
+                      controller: TextEditingController(text: transcribedText ?? enteredText),
                       onChanged: (text) {
                         if (_timer != null && _timer!.isActive) {
                           _timer!.cancel(); // Cancel the previous timer
@@ -286,24 +279,21 @@ updateHintText(translatedText);
                         fontWeight: FontWeight.bold,
                         color: Colors.black,
                       ),
+                      maxLines: 2,
                     ),
                   ),
-                 Padding(
-                    padding: const EdgeInsets.all(10.0),
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: translatedText,
-                        border: InputBorder.none,
-                        enabled: false,
-                      ),
-                      style: const TextStyle(
-                        fontSize: 40,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                      
-                    ),
-                  ),
+                  Padding(
+                      padding: const EdgeInsets.only(left: 10.0),
+                      child: Align(
+                          alignment: Alignment.bottomLeft,
+                          child: Opacity(
+                            opacity: 0.5,
+                            child: Text(resultText,
+                                style: const TextStyle(
+                                    fontSize: 40,
+                                    color: Colors.black,
+                                    fontWeight: FontWeight.bold)),
+                          ))),
                 ],
               ),
             ),
