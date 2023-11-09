@@ -37,10 +37,10 @@ class _TranslationPageState extends State<TranslationPage> {
   final TextEditingController _textController = TextEditingController();
   String enteredText = '';
   Timer? _timer;
-  String transcribedText = '';
+  String? transcribedText = '';
   String TextChoose = 'Conyo';
-   String resultText = '';
-    
+  String resultText = '';
+  bool isTranscribed = true;
   String finalText = '';
   int currentIndex = 0;
   bool isVisible = true;
@@ -69,8 +69,6 @@ class _TranslationPageState extends State<TranslationPage> {
       }
     });
   }
-
-
 
   Future<void> requestPermissions() async {
     Map<Permission, PermissionStatus> statuses = await [
@@ -179,7 +177,7 @@ class _TranslationPageState extends State<TranslationPage> {
     try {
       // Replace the URL with your server endpoint
       // ignore: prefer_interpolation_to_compose_strings
-      var uri = Uri.parse('http://192.168.68.101:5000/$TextChoose');
+      var uri = Uri.parse('http://192.168.31.29:5000/upload_text/$TextChoose');
 
       var request = http.MultipartRequest('POST', uri)
         ..fields['text'] =
@@ -190,12 +188,14 @@ class _TranslationPageState extends State<TranslationPage> {
       if (response.statusCode == 200) {
         String responseBody = await response.stream.bytesToString();
         Map<String, dynamic> jsonResponse = json.decode(responseBody);
-        String recognizedText = jsonResponse['recognized_text'];
+        String recognizedText = jsonResponse['input_text'];
         String translatedText = jsonResponse['translated_text'];
 
         setState(() {
           transcribedText = recognizedText.replaceAll('"', '');
-          translatedText = translatedText.replaceAll('"', '');
+          print(transcribedText);
+          resultText = translatedText.replaceAll('"', '');
+          print(resultText);
         });
       } else {
         _logger.warning('Error: ${response.reasonPhrase}');
@@ -205,7 +205,6 @@ class _TranslationPageState extends State<TranslationPage> {
     }
   }
 
- 
   @override
   void dispose() {
     _textController
@@ -256,19 +255,26 @@ class _TranslationPageState extends State<TranslationPage> {
                   Padding(
                     padding: const EdgeInsets.only(top: 25, left: 10),
                     child: TextField(
-                      controller: TextEditingController(text: transcribedText ?? enteredText),
+                      controller: TextEditingController(
+                          text: isTranscribed ? transcribedText : enteredText),
                       onChanged: (text) {
                         if (_timer != null && _timer!.isActive) {
                           _timer!.cancel(); // Cancel the previous timer
                         }
                         _timer = Timer(const Duration(milliseconds: 800), () {
                           setState(() {
-                            enteredText = transcribedText;
+                            setState(() {
+                              enteredText = text;
+                            isTranscribed = !text.isEmpty;
+                              // Switch to enteredText when the user starts typing
+                            });
+                            sendTextToServer(enteredText);
                             print(
                                 enteredText); // Capture the text after a delay
                           });
                         });
-                        //sendTextToServer(text);
+
+                        // You can use enteredText to send to the server
                       },
                       decoration: const InputDecoration(
                         hintText: 'Enter Text',
@@ -351,22 +357,25 @@ class _TranslationPageState extends State<TranslationPage> {
               ],
             ),
           ),
-          Visibility(
-            visible: !showfab,
-            child: SizedBox(
-              height: 80,
-              width: 80,
-              child: GestureDetector(
-                onTap: toggleRecording,
-                child: FloatingActionButton(
-                  backgroundColor: isRecording ? Colors.red : null,
-                  child: Icon(
-                    isRecording ? Icons.stop : Icons.mic,
-                    size: 42,
+          Padding(
+            padding: const EdgeInsets.only(bottom: 20),
+            child: Visibility(
+              visible: !showfab,
+              child: SizedBox(
+                height: 80,
+                width: 80,
+                child: GestureDetector(
+                  onTap: toggleRecording,
+                  child: FloatingActionButton(
+                    backgroundColor: isRecording ? Colors.red : null,
+                    child: Icon(
+                      isRecording ? Icons.stop : Icons.mic,
+                      size: 42,
+                    ),
+                    onPressed: () {
+                      toggleRecording();
+                    },
                   ),
-                  onPressed: () {
-                    toggleRecording();
-                  },
                 ),
               ),
             ),
